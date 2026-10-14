@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AquaGuard | Municipal Water Quality Alert & Telemetry System</title>
+  <meta name="description" content="City environmental water quality monitoring system for detecting unsafe thresholds in pH, turbidity, chlorine, lead, and dissolved oxygen with live telemetry and alerts.">
+  
+  <!-- Modern Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Chart.js for High-performance Canvas Data Visualizations -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Application Stylesheet -->
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="navbar">
+    <div class="brand">
+      <div class="brand-icon">💧</div>
+      <div class="brand-text">
+        <h1>AquaGuard Municipal Ops</h1>
+        <span>Environmental Quality Alert System</span>
+      </div>
+    </div>
+
+    <div class="nav-actions">
+      <div class="pulse-badge" id="systemStatusBadge">
+        <span class="pulse-dot"></span>
+        <span id="systemStatusText">Telemetry Online</span>
+      </div>
+
+      <button id="btnToggleSim" class="btn btn-emerald" onclick="toggleSimulation()">
+        <span>▶</span> <span id="simBtnLabel">Start Live Stream</span>
+      </button>
+
+      <label class="btn btn-primary" style="margin-bottom: 0;">
+        <span>📂</span> Upload CSV
+        <input type="file" id="csvFileInput" accept=".csv" style="display: none;" onchange="handleCsvUpload(event)">
+      </label>
+
+      <button class="btn btn-secondary" onclick="openThresholdModal()">
+        <span>⚙</span> Thresholds
+      </button>
+
+      <button class="btn btn-secondary" onclick="downloadReport()">
+        <span>📑</span> Export Report
+      </button>
+
+      <button class="btn btn-danger" onclick="clearTelemetry()">
+        <span>🗑</span> Reset
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Layout -->
+  <main class="app-container">
+
+    <!-- KPI Metric Cards -->
+    <section class="kpi-grid">
+      <div class="kpi-card glass-panel">
+        <div class="kpi-icon" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">📊</div>
+        <div>
+          <div class="kpi-title">Ingested Records</div>
+          <div class="kpi-value" id="kpiTotalRecords" style="color: #38bdf8;">0</div>
+        </div>
+      </div>
+
+      <div class="kpi-card glass-panel">
+        <div class="kpi-icon" style="background: rgba(139, 92, 246, 0.15); color: #a78bfa;">📡</div>
+        <div>
+          <div class="kpi-title">Active Stations</div>
+          <div class="kpi-value" id="kpiStationsCount" style="color: #a78bfa;">0</div>
+        </div>
+      </div>
+
+      <div class="kpi-card glass-panel">
+        <div class="kpi-icon" style="background: rgba(244, 63, 94, 0.15); color: #fb7185;">🚨</div>
+        <div>
+          <div class="kpi-title">Critical Hazards</div>
+          <div class="kpi-value" id="kpiCriticalAlerts" style="color: #fb7185;">0</div>
+        </div>
+      </div>
+
+      <div class="kpi-card glass-panel">
+        <div class="kpi-icon" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;">⚠️</div>
+        <div>
+          <div class="kpi-title">Warning Flags</div>
+          <div class="kpi-value" id="kpiWarningAlerts" style="color: #fbbf24;">0</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Telemetry Visualizer & Safe Limits -->
+    <section class="telemetry-row">
+      <div class="chart-card glass-panel">
+        <div class="card-header">
+          <h2><span>📈</span> Sensor Telemetry Real-time Stream</h2>
+          <div class="metric-selector">
+            <button class="metric-btn active" data-metric="ph" onclick="selectMetric('ph')">pH</button>
+            <button class="metric-btn" data-metric="turbidity" onclick="selectMetric('turbidity')">Turbidity</button>
+            <button class="metric-btn" data-metric="chlorine" onclick="selectMetric('chlorine')">Chlorine</button>
+            <button class="metric-btn" data-metric="lead" onclick="selectMetric('lead')">Lead (Pb)</button>
+            <button class="metric-btn" data-metric="dissolved_oxygen" onclick="selectMetric('dissolved_oxygen')">Oxygen</button>
+            <button class="metric-btn" data-metric="temperature" onclick="selectMetric('temperature')">Temp</button>
+          </div>
+        </div>
+        <div class="chart-canvas-wrapper">
+          <canvas id="telemetryChart"></canvas>
+        </div>
+      </div>
+
+      <div class="thresholds-card glass-panel">
+        <div class="card-header">
+          <h2><span>🛡️</span> Compliance Thresholds</h2>
+          <span style="font-size: 0.75rem; color: #94a3b8;">EPA / WHO Standard</span>
+        </div>
+        <div class="threshold-list" id="thresholdDisplayList">
+          <!-- Populated dynamically via JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Incidents Table & Error Console -->
+    <section class="alerts-grid">
+      <div class="glass-panel" style="padding: 1.5rem;">
+        <div class="card-header">
+          <h2><span>🚨</span> Detected Unsafe Conditions & Alerts</h2>
+          <span id="alertsSummaryCount" style="font-size: 0.8rem; color: #94a3b8;">Displaying latest events</span>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Station</th>
+                <th>Severity</th>
+                <th>Metric</th>
+                <th>Value</th>
+                <th>Standard</th>
+                <th>Incident Details</th>
+              </tr>
+            </thead>
+            <tbody id="alertsTableBody">
+              <tr>
+                <td colspan="7" style="text-align: center; padding: 2rem; color: #64748b;">
+                  No active safety alerts. Water quality metrics meet standards.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="glass-panel" style="padding: 1.5rem;">
+        <div class="card-header">
+          <h2><span>🛠</span> Sensor Health & Error Logs</h2>
+          <span style="font-size: 0.8rem; color: #94a3b8;">Hardware/Data parsing</span>
+        </div>
+        <div class="error-console" id="errorConsole">
+          <div style="color: #64748b;">System initialized. Waiting for telemetry data...</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Thresholds Configuration Modal -->
+  <div class="modal-overlay" id="thresholdModal">
+    <div class="modal-content">
+      <button class="modal-close" onclick="closeThresholdModal()">✕</button>
+      <h2 style="margin-bottom: 0.5rem; font-size: 1.3rem;">Configure Regulatory Thresholds</h2>
+      <p style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 1.5rem;">Update municipal alert trigger boundaries for active water monitoring stations.</p>
+      
+      <form id="thresholdForm" onsubmit="saveThresholds(event)">
+        <div id="modalThresholdFields">
+          <!-- Populated dynamically -->
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem;">
+          <button type="button" class="btn btn-secondary" onclick="closeThresholdModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Application Logic -->
+  <script src="/static/app.js"></script>
+</body>
+</html>
